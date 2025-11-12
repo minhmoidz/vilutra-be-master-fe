@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { Card, Descriptions, Tag, Spin, Alert, Empty, message, Image, Tooltip, Divider,Button } from 'antd'; // Thêm Image, Tooltip, Divider
-import { LoadingOutlined, FileSearchOutlined, VideoCameraOutlined, CalendarOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { LoadingOutlined, VideoCameraOutlined, CalendarOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { apiService } from '../../services/api.service';
 import { formatDate } from '../../utils/dateFormat';
 import { API_CONFIG } from '../../config/api.config';

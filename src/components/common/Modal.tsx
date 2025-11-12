@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Modal as AntdModal } from 'antd'; // Đổi tên import để tránh xung đột với export
-import type { ModalProps as AntdModalProps } from 'antd'; // Lấy Type ModalProps từ Antd
+
 
 interface ModalAntdProps {
     isOpen: boolean;

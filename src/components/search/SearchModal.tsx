@@ -1,19 +1,16 @@
-// File: src/components/search/SearchModalAntd.tsx (Phiên bản mới)
+// File: src/components/search/SearchPageAntd.tsx (Phiên bản Page hoàn chỉnh)
 
 import React, { useState } from 'react';
-import { Modal, Tabs, Form, Input, InputNumber, Button, Upload, message, Divider } from 'antd';
+import { Tabs, Form, Input, InputNumber, Button, Upload, message, Divider, Card, Spin } from 'antd';
 import { FileTextOutlined, PictureOutlined, UploadOutlined } from '@ant-design/icons';
 import { apiService } from '../../services/api.service';
-import { LoadingSpinner } from '../common/LoadingSpinner';
 
-// Định nghĩa props như cũ
-interface SearchModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+// Props: Chỉ cần onSuccess
+interface SearchPageProps {
   onSuccess: () => void;
 }
 
-export const SearchModalAntd: React.FC<SearchModalProps> = ({ isOpen, onClose, onSuccess }) => {
+export const SearchPageAntd: React.FC<SearchPageProps> = ({ onSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [activeKey, setActiveKey] = useState('text'); // 'text' hoặc 'image'
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -27,11 +24,10 @@ export const SearchModalAntd: React.FC<SearchModalProps> = ({ isOpen, onClose, o
     try {
       await apiService.searchByText(
         values.searchText,
-        values.textTimestamp || undefined, // Đảm bảo giá trị trống là undefined
-        values.textDuration // InputNumber sẽ đảm bảo là number hoặc undefined
+        values.textTimestamp || undefined,
+        values.textDuration
       );
-      onSuccess();
-      onClose();
+      onSuccess(); // Báo cho Dashboard chuyển trang
       message.success('Tìm kiếm bằng Text đã được khởi tạo thành công!');
       textForm.resetFields();
     } catch (error: any) {
@@ -44,34 +40,33 @@ export const SearchModalAntd: React.FC<SearchModalProps> = ({ isOpen, onClose, o
   // --- Logic Search by Image ---
   const handleImageSearch = async (values: any) => {
     if (!imageFile) {
-      message.error('Vui lòng chọn ảnh');
-      return;
+        message.error('Vui lòng chọn ảnh');
+        return;
     }
     setLoading(true);
     try {
-      await apiService.searchByImage(
-        imageFile,
-        values.imageTimestamp || undefined,
-        values.imageDuration
-      );
-      onSuccess();
-      onClose();
-      message.success('Tìm kiếm bằng Ảnh đã được khởi tạo thành công!');
-      imageForm.resetFields();
-      setImageFile(null); // Reset file
+        await apiService.searchByImage(
+            imageFile,
+            values.imageTimestamp || undefined,
+            values.imageDuration
+        );
+        onSuccess(); // Báo cho Dashboard chuyển trang
+        message.success('Tìm kiếm bằng Ảnh đã được khởi tạo thành công!');
+        imageForm.resetFields();
+        setImageFile(null);
     } catch (error: any) {
-      message.error('Lỗi khi tìm kiếm: ' + error.message);
+        message.error('Lỗi khi tìm kiếm: ' + error.message);
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
   };
 
-  // Cấu hình cho component Upload của Antd
+  // Cấu hình component Upload
   const uploadProps = {
     accept: 'image/*',
     beforeUpload: (file: File) => {
       setImageFile(file);
-      return false; // Ngăn chặn Antd tự động upload
+      return false; // Ngăn tự động upload
     },
     onRemove: () => {
       setImageFile(null);
@@ -79,22 +74,14 @@ export const SearchModalAntd: React.FC<SearchModalProps> = ({ isOpen, onClose, o
     fileList: imageFile ? [{ uid: '1', name: imageFile.name, status: 'done', size: imageFile.size } as any] : [],
   };
 
+  // --- Nội dung các Tab ---
+
   const textTabContent = (
-    <Form
-      form={textForm}
-      layout="vertical"
-      onFinish={handleTextSearch}
-      initialValues={{ textDuration: 60 }}
-    >
-      <Form.Item
-        label="Nhập text tìm kiếm"
-        name="searchText"
-        rules={[{ required: true, message: 'Vui lòng nhập nội dung tìm kiếm!' }]}
-      >
+    <Form form={textForm} layout="vertical" onFinish={handleTextSearch} initialValues={{ textDuration: 60 }}>
+      <Form.Item label="Nhập text tìm kiếm" name="searchText" rules={[{ required: true, message: 'Vui lòng nhập nội dung tìm kiếm!' }]}>
         <Input.TextArea rows={4} placeholder="Nhập từ khóa hoặc mô tả..." />
       </Form.Item>
       <Form.Item label="Timestamp (optional)" name="textTimestamp">
-        {/* Antd không có datetime-local, dùng Input text cho định dạng ISO 8601 */}
         <Input placeholder="VD: 2025-11-10T15:30:00Z" />
       </Form.Item>
       <Form.Item label="Duration (seconds, optional)" name="textDuration">
@@ -108,12 +95,7 @@ export const SearchModalAntd: React.FC<SearchModalProps> = ({ isOpen, onClose, o
   );
 
   const imageTabContent = (
-    <Form
-      form={imageForm}
-      layout="vertical"
-      onFinish={handleImageSearch}
-      initialValues={{ imageDuration: 60 }}
-    >
+    <Form form={imageForm} layout="vertical" onFinish={handleImageSearch} initialValues={{ imageDuration: 60 }}>
       <Form.Item label="Chọn ảnh" required>
         <Upload {...uploadProps}>
           <Button icon={<UploadOutlined />}>Chọn ảnh</Button>
@@ -132,38 +114,34 @@ export const SearchModalAntd: React.FC<SearchModalProps> = ({ isOpen, onClose, o
     </Form>
   );
 
+  // Danh sách các tab
   const items = [
     {
       key: 'text',
-      label: (
-        <span>
-          <FileTextOutlined /> Tìm bằng Text
-        </span>
-      ),
+      label: <span> <FileTextOutlined /> Tìm bằng Text </span>,
       children: textTabContent,
     },
     {
       key: 'image',
-      label: (
-        <span>
-          <PictureOutlined /> Tìm bằng Ảnh
-        </span>
-      ),
+      label: <span> <PictureOutlined /> Tìm bằng Ảnh </span>,
       children: imageTabContent,
     },
   ];
 
+  // --- Render ---
   return (
-    <Modal
-      title="Khởi tạo Tìm kiếm Mới"
-      open={isOpen} // antd dùng 'open' thay vì 'isOpen'
-      onCancel={onClose}
-      footer={null} // Ẩn footer mặc định (vì đã có nút submit trong form)
-      centered // Hiển thị ở giữa màn hình
-      maskClosable={!loading} // Ngăn đóng khi đang tải
-    >
-      {loading && <LoadingSpinner />}
-      <Tabs activeKey={activeKey} onChange={setActiveKey} items={items} />
-    </Modal>
+    // Layout của "trang"
+    <div className="p-6 bg-gray-50 min-h-full">
+        <div className="max-w-4xl mx-auto">
+            <h1 className="text-3xl font-bold mb-6 text-gray-800">Khởi tạo Tìm kiếm Mới</h1>
+            
+            {/* Dùng Card để bọc Tabs */}
+            <Card className="shadow-lg">
+                <Spin spinning={loading} tip="Đang xử lý...">
+                    <Tabs activeKey={activeKey} onChange={setActiveKey} items={items} />
+                </Spin>
+            </Card>
+        </div>
+    </div>
   );
 };
