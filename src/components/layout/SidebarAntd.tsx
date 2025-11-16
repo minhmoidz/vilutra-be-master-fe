@@ -1,11 +1,10 @@
-// File: src/components/layout/SidebarAntd.tsx (Phiên bản HIỆN ĐẠI)
-
 import { useState } from 'react';
 import { Layout, Menu, Button } from 'antd';
 import {
   SearchOutlined,
   DashboardOutlined,
-  VideoCameraAddOutlined
+  VideoCameraAddOutlined,
+  CameraOutlined, // <-- ICON MỚI
 } from '@ant-design/icons';
 
 const { Sider } = Layout;
@@ -17,8 +16,21 @@ export const SidebarAntd: React.FC = () => {
     const hash = window.location.hash;
     if (hash === '#/upload') return 'upload';
     if (hash === '#/search') return 'search';
+    if (hash === '#/cameras') return 'cameras'; // <-- KEY MỚI
     if (hash.startsWith('#/job/')) return 'dashboard';
     return 'dashboard';
+  };
+
+  const menuStyle: React.CSSProperties = {
+    height: '44px',
+    borderRadius: '8px',
+    margin: '4px 0',
+    cursor: 'pointer',
+  };
+
+  const menuLabelStyle: React.CSSProperties = {
+    fontSize: '14px',
+    fontWeight: 500,
   };
 
   return (
@@ -37,7 +49,7 @@ export const SidebarAntd: React.FC = () => {
       }}
     >
       
-      {/* Logo Section - Redesigned */}
+      {/* Logo Section (Giữ nguyên) */}
       <div
         style={{
           height: '72px',
@@ -59,7 +71,7 @@ export const SidebarAntd: React.FC = () => {
             gap: '12px'
           }}
         >
-          {/* Icon với gradient background */}
+          {/* Icon */}
           <div
             style={{
               width: '40px',
@@ -94,7 +106,7 @@ export const SidebarAntd: React.FC = () => {
                   whiteSpace: 'nowrap',
                 }}
               >
-                Vilutra
+                GuardVision
               </h1>
               <p style={{ 
                 margin: 0, 
@@ -110,7 +122,7 @@ export const SidebarAntd: React.FC = () => {
         </a>
       </div>
 
-      {/* Menu Section */}
+      {/* Menu Section (Đã cập nhật) */}
       <div style={{ 
         padding: '16px 12px',
         flex: 1,
@@ -128,50 +140,35 @@ export const SidebarAntd: React.FC = () => {
             // Xử lý navigation trực tiếp
             if (key === 'dashboard') window.location.hash = '#/';
             if (key === 'upload') window.location.hash = '#/upload';
+            if (key === 'cameras') window.location.hash = '#/cameras'; // <-- LINK MỚI
             if (key === 'search') window.location.hash = '#/search';
           }}
           items={[
             {
               key: 'dashboard',
               icon: <DashboardOutlined style={{ fontSize: '18px' }} />,
-              label: (
-                <span style={{ 
-                  fontSize: '14px',
-                  fontWeight: 500,
-                }}>
-                  Danh sách Jobs
-                </span>
-              ),
-              style: {
-                height: '44px',
-                borderRadius: '8px',
-                margin: '4px 0',
-                cursor: 'pointer',
-              }
+              label: <span style={menuLabelStyle}>Danh sách Jobs</span>,
+              style: menuStyle
             },
             {
               key: 'upload',
               icon: <VideoCameraAddOutlined style={{ fontSize: '18px' }} />,
-              label: (
-                <span style={{ 
-                  fontSize: '14px',
-                  fontWeight: 500,
-                }}>
-                  Upload Video
-                </span>
-              ),
-              style: {
-                height: '44px',
-                borderRadius: '8px',
-                margin: '4px 0',
-                cursor: 'pointer',
-              }
+              label: <span style={menuLabelStyle}>Upload Video</span>,
+              style: menuStyle
             },
+            // --- [MỤC MỚI] ---
+            {
+              key: 'cameras',
+              icon: <CameraOutlined style={{ fontSize: '18px' }} />,
+              label: <span style={menuLabelStyle}>Quản lý Camera</span>,
+              style: menuStyle
+            },
+            // --- [HẾT MỤC MỚI] ---
           ]}
         />
       </div>
 
-      {/* Search Button - Premium Design */}
+      {/* Search Button (Giữ nguyên) */}
       <div
         style={{
           padding: collapsed ? '16px 8px' : '16px 16px 20px 16px',

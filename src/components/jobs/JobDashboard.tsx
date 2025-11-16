@@ -1,4 +1,4 @@
-// File: src/pages/JobDashboard.tsx (Đã CẬP NHẬT routing)
+
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Layout, message } from 'antd';
@@ -7,12 +7,12 @@ import { VideoUploadPageAntd } from '../upload/VideoUploadModal';
 import { SearchPageAntd } from '../search/SearchModal';
 import { JobDetailAntd } from './JobDetail';
 import { SidebarAntd } from '../layout/SidebarAntd';
-
+import { CameraManagementPage } from '../cameras/CameraManagementPage';
 
 const { Content } = Layout;
 
-// Định nghĩa các view mà chúng ta có
-type ViewType = 'list' | 'detail' | 'upload' | 'search';
+// [CẬP NHẬT] Định nghĩa các view mà chúng ta có
+type ViewType = 'list' | 'detail' | 'upload' | 'search' | 'cameras';
 
 export const JobDashboard: React.FC = () => {
   // State quản lý view hiện tại
@@ -20,7 +20,7 @@ export const JobDashboard: React.FC = () => {
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const jobListRef = useRef<JobListHandle>(null);
 
-  // Effect xử lý routing bằng hash (NÂNG CẤP)
+  // Effect xử lý routing bằng hash
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
@@ -31,9 +31,13 @@ export const JobDashboard: React.FC = () => {
       } else if (hash === '#/search') {
         setCurrentView('search');
         setCurrentJobId(null);
+      // [THÊM MỚI] Xử lý route camera
+      } else if (hash === '#/cameras') { 
+        setCurrentView('cameras');
+        setCurrentJobId(null);
       } else if (hash.startsWith('#/job/')) {
         setCurrentView('detail');
-        setCurrentJobId(hash.substring(6)); // Lấy ID
+        setCurrentJobId(hash.substring(6)); // Lấy ID sau #/job/
       } else {
         setCurrentView('list');
         setCurrentJobId(null);
@@ -46,30 +50,65 @@ export const JobDashboard: React.FC = () => {
     return () => {
       window.removeEventListener('hashchange', handleHashChange);
     };
-  }, []); // Chỉ chạy 1 lần
+  }, []);
 
-  const handlePageSuccess = () => {
-    message.success('Thao tác thành công! Đang quay về danh sách jobs...');
-    // Chuyển hash về trang chủ, `handleHashChange` ở trên sẽ tự động bắt
+  // Xử lý khi Upload thành công - Về danh sách
+  const handleUploadSuccess = () => {
+    message.success('Upload video thành công! Đang quay về danh sách jobs...');
     window.location.hash = '#/';
   
     setTimeout(() => {
-        jobListRef.current?.reload();
+      jobListRef.current?.reload();
     }, 100);
   };
 
-  // Hàm quyết định render component nào (NÂNG CẤP)
+  // Xử lý khi Search thành công - Chuyển đến trang detail hoặc danh sách
+  const handleSearchSuccess = (jobId?: string) => {
+    if (jobId) {
+      // Có jobId -> chuyển đến trang detail của job vừa tạo
+      message.success('Tìm kiếm đã được khởi tạo! Đang chuyển đến trang kết quả...');
+      window.location.hash = `#/job/${jobId}`;
+    } else {
+      // Không có jobId -> về danh sách
+      message.success('Tìm kiếm đã được khởi tạo! Đang quay về danh sách...');
+      window.location.hash = '#/';
+      
+      setTimeout(() => {
+        jobListRef.current?.reload();
+      }, 100);
+    }
+  };
+
+  // Hàm quyết định render component nào
   const renderContent = () => {
     switch (currentView) {
       case 'upload':
-        return <VideoUploadPageAntd onSuccess={handlePageSuccess} />;
+        return <VideoUploadPageAntd onSuccess={handleUploadSuccess} />;
+      
       case 'search':
-        return <SearchPageAntd onSuccess={handlePageSuccess} />;
+        return <SearchPageAntd onSuccess={handleSearchSuccess} />;
+      
+      // [THÊM MỚI] Render trang camera
+      case 'cameras':
+        return <CameraManagementPage />;
+        
       case 'detail':
-        return <JobDetailAntd jobId={currentJobId!} onBack={() => (window.location.hash = '#/')} />;
+        if (!currentJobId) {
+          message.error('Không tìm thấy Job ID');
+          window.location.hash = '#/';
+          return null;
+        }
+        return (
+          <JobDetailAntd 
+            jobId={currentJobId} 
+            onBack={() => {
+              window.location.hash = '#/';
+            }} 
+          />
+        );
+      
       case 'list':
       default:
-    
         return <JobListAntd ref={jobListRef} />;
     }
   };
@@ -77,18 +116,15 @@ export const JobDashboard: React.FC = () => {
   // --- RENDER ---
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      
-  
+      {/* Sidebar */}
       <SidebarAntd />
 
-      {/* 2. Layout phụ bọc Content */}
+      {/* Layout phụ bọc Content */}
       <Layout className="site-layout">
         <Content style={{ backgroundColor: '#f0f2f5' }}> 
           {renderContent()}
         </Content>
       </Layout>
-
-      {/* 3. BỎ: Các Modals */}
     </Layout>
   );
 };
