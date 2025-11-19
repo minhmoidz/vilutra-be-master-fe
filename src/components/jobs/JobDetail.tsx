@@ -25,9 +25,9 @@ interface JobDetailProps {
 const CAMERA_POSITIONS = [
   { id: 1, lat: 21.0285, lng: 105.8542, label: 'CAM 1', address: 'Vị trí Camera 1' },
   { id: 2, lat: 21.0295, lng: 105.8552, label: 'CAM 2', address: 'Vị trí Camera 2' },
-  { id: 3, lat: 21.0275, lng: 105.8532, label: 'CAM 3', address: 'Vị trí Camera 3' },
-  { id: 4, lat: 21.0265, lng: 105.8562, label: 'CAM 4', address: 'Vị trí Camera 4' },
-  { id: 5, lat: 21.0255, lng: 105.8522, label: 'CAM 5', address: 'Vị trí Camera 5' },
+  { id: 3, lat: 21.0275, lng: 105.8547, label: 'CAM 3', address: 'Vị trí Camera 3' }, // Đã điều chỉnh gần hơn
+  { id: 4, lat: 21.0280, lng: 105.8557, label: 'CAM 4', address: 'Vị trí Camera 4' }, // Đã điều chỉnh gần hơn
+  { id: 5, lat: 21.0290, lng: 105.8537, label: 'CAM 5', address: 'Vị trí Camera 5' }, // Đã điều chỉnh gần hơn
 ];
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyAjJ3aT8qkpWtHVfb2AgWPlBtCUFU0EY4c';
@@ -105,8 +105,8 @@ export const JobDetailAntd: React.FC<JobDetailProps> = ({ jobId, onBack }) => {
 
     // Khởi tạo map (trung tâm Hà Nội)
     const map = new google.maps.Map(mapRef.current, {
-      center: { lat: 21.0285, lng: 105.8542 },
-      zoom: 15,
+      center: { lat: 21.0285, lng: 105.8542 }, // Tọa độ trung tâm (Ví dụ Hà Nội)
+      zoom: 18, // ĐÃ ĐIỀU CHỈNH: Tăng mức zoom lên 18 để hiển thị chi tiết hơn (khu phố)
       mapTypeId: 'roadmap',
       streetViewControl: false,
       mapTypeControl: true,
@@ -177,12 +177,15 @@ export const JobDetailAntd: React.FC<JobDetailProps> = ({ jobId, onBack }) => {
       markersRef.current.push(marker);
     });
 
-    // Điều chỉnh zoom để hiện tất cả markers
+    // **ĐÃ XÓA ĐOẠN CODE map.fitBounds(bounds)**
+    // Bản đồ sẽ giữ nguyên zoom: 18 và center đã thiết lập
+    /*
     const bounds = new google.maps.LatLngBounds();
     CAMERA_POSITIONS.forEach(camera => {
       bounds.extend({ lat: camera.lat, lng: camera.lng });
     });
     map.fitBounds(bounds);
+    */
 
   }, [mapLoaded, job]);
 
@@ -229,7 +232,7 @@ export const JobDetailAntd: React.FC<JobDetailProps> = ({ jobId, onBack }) => {
         
         {/* Polling/Loading Indicator */}
         {(loading || isPolling) && job.status !== 'COMPLETED' && job.status !== 'FAILED' && (
-             <Alert
+              <Alert
                 message="Đang Cập nhật Trạng thái"
                 description={`Job đang ở trạng thái ${job.status}. Hệ thống đang tự động tải lại.`}
                 type="info"
@@ -269,7 +272,7 @@ export const JobDetailAntd: React.FC<JobDetailProps> = ({ jobId, onBack }) => {
                   <CalendarOutlined /> Ngày tạo
               </span>
           }>
-              {formatDate(job.createdAt)}
+            {formatDate(job.createdAt)}
           </Descriptions.Item>
             {job.updatedAt && (
                 <Descriptions.Item label="Cập nhật cuối">{formatDate(job.updatedAt)}</Descriptions.Item>
@@ -339,7 +342,7 @@ export const JobDetailAntd: React.FC<JobDetailProps> = ({ jobId, onBack }) => {
               <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
                 <p className="text-sm text-blue-800">
                   <InfoCircleOutlined className="mr-2" />
-                  <strong>Hướng dẫn:</strong> Click vào marker camera (có animation bounce) để xem frames. 
+                  <strong>Hướng dẫn:</strong> Bản đồ hiển thị khu vực chi tiết (zoom 18). Click vào marker camera (có animation bounce) để xem frames. 
                   Hover vào marker để xem thông tin chi tiết.
                 </p>
               </div>
