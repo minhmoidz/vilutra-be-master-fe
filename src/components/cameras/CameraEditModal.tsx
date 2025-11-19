@@ -102,7 +102,6 @@ export const CameraEditModal: React.FC<CameraEditModalProps> = ({ open, onCancel
         >
           <Select onChange={(value) => setSourceType(value)}>
             <Option value="stream">Stream (RTSP/HTTP)</Option>
-            <Option value="video">Video File</Option>
           </Select>
         </Form.Item>
 

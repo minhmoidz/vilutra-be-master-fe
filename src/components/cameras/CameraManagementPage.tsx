@@ -4,8 +4,6 @@ import {
   PlusOutlined, 
   EditOutlined, 
   DeleteOutlined, 
-  QuestionCircleOutlined, 
-  ReloadOutlined,
   VideoCameraAddOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -14,6 +12,9 @@ import type { Camera } from '../../types';
 import { AddCameraModal } from '../upload/AddCameraModal';
 import { CameraEditModal } from './CameraEditModal';
 import { CameraUploadModal } from './CameraUploadModal';
+
+// --- IMPORT MỚI: Hook và Component Stream ---
+import { useStreamManager, StreamActionButton } from '../../components/stream/StreamControls';
 
 const { Title, Text } = Typography;
 
@@ -25,6 +26,13 @@ export const CameraManagementPage: React.FC = () => {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+
+  // --- LOGIC MỚI: Quản lý trạng thái Stream ---
+  const { 
+    activeStreams,      // Danh sách các camera đang stream
+    registerStream,     // Hàm update khi bấm Start
+    unregisterStream    // Hàm update khi bấm Stop
+  } = useStreamManager();
 
   const fetchCameras = useCallback(async () => {
     setLoading(true);
@@ -116,6 +124,22 @@ export const CameraManagementPage: React.FC = () => {
       ],
       onFilter: (value, record) => record.is_active === value,
     },
+    // --- CỘT MỚI: Stream Control (Chỉ thêm cột này) ---
+    {
+      title: 'Stream',
+      key: 'stream',
+      width: 120,
+      align: 'center',
+      render: (_, record) => (
+        <StreamActionButton 
+          camera={record}
+          activeJobId={activeStreams[record.camera_id]} 
+          onStreamStarted={registerStream}
+          onStreamStopped={unregisterStream}
+        />
+      )
+    },
+    // --------------------------------------------------
     {
       title: 'Loại Nguồn',
       dataIndex: 'source_type',
@@ -259,7 +283,7 @@ export const CameraManagementPage: React.FC = () => {
           columns={columns}
           dataSource={cameras}
           loading={loading}
-          rowKey="id"
+          rowKey="id" // Giữ nguyên như code gốc của bạn (lưu ý: nếu id không tồn tại thì nên đổi thành camera_id)
           scroll={{ x: 1600 }}
           pagination={{ pageSize: 10 }}
         />

@@ -1,11 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Modal, Form, message, notification } from 'antd';
-// [THÊM MỚI] Import icon còn thiếu
 import { VideoCameraOutlined } from '@ant-design/icons';
 import { apiService } from '../../services/api.service';
 import type { Camera, VideoMetadata } from '../../types';
 import type { UploadProps } from 'antd';
-// [MỚI] Import Form UI
 import { VideoUploadForm } from '../upload/VideoUploadForm'; 
 
 interface CameraUploadModalProps {
@@ -31,57 +29,47 @@ export const CameraUploadModal: React.FC<CameraUploadModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   
-  // Lấy thời điểm modal mở
   const pageEnterISORef = useRef<string>(new Date().toISOString());
 
-  // Tự động điền thông tin vào form khi modal được mở (khi props 'camera' thay đổi)
   useEffect(() => {
     if (open && camera) {
-      // Tự động tạo Video ID
       const defaultVideoId = `${camera.camera_id}_${new Date().getTime()}`;
       
       form.setFieldsValue({
-        cameraId: camera.camera_id, // Chọn camera trong Select
-        videoId: defaultVideoId, // Điền Video ID
+        videoId: defaultVideoId,
         timestampStart: pageEnterISORef.current,
         mediaName: '0',
       });
     } else if (!open) {
-      // Reset khi đóng
       form.resetFields();
       setVideoFile(null);
+      pageEnterISORef.current = new Date().toISOString();
     }
   }, [open, camera, form]);
 
-  // Logic upload
   const handleUpload = async (values: any) => {
     if (!videoFile) {
       message.error('Vui lòng chọn file video!');
       return;
     }
-    // Dù đã pre-fill, vẫn kiểm tra lại giá trị từ form
-    if (!values.cameraId) { 
-      message.error('Vui lòng chọn Camera ID!');
-      return;
-    }
-    if (!values.videoId) {
-      message.error('Vui lòng nhập Video ID!');
+    
+    if (!values.cameraId || !values.videoId) { 
+      message.error('Vui lòng kiểm tra lại Camera ID và Video ID!');
       return;
     }
 
     setLoading(true);
     
-    // Chuẩn bị metadata
     const metadata: VideoMetadata = {
       video_id: values.videoId,
-      camera_id: values.cameraId, // Lấy từ form
+      camera_id: values.cameraId,
       timestamp_start: values.timestampStart || pageEnterISORef.current,
       media_name: (values.mediaName ?? '').toString().trim() || '0',
     };
 
     notification.info({
       message: 'Đang Upload',
-      description: `Đang upload video cho ${camera?.name}...`,
+      description: `Đang upload video cho ${camera?.name || values.cameraId}...`,
       icon: <VideoCameraOutlined style={{ color: '#108ee9' }} />,
       duration: 0,
       key: 'uploading-modal',
@@ -97,7 +85,7 @@ export const CameraUploadModal: React.FC<CameraUploadModalProps> = ({
         key: 'uploading-modal',
       });
       
-      onSuccess(response); // Thông báo cho component cha (CameraManagementPage)
+      onSuccess(response); 
       
     } catch (error: any) {
       notification.error({
@@ -111,12 +99,11 @@ export const CameraUploadModal: React.FC<CameraUploadModalProps> = ({
     }
   };
 
-  // Cấu hình Upload
   const uploadProps: UploadProps = {
     accept: 'video/*',
     beforeUpload: (file: File) => {
       setVideoFile(file);
-      return false; // Ngăn Antd tự động upload
+      return false;
     },
     onRemove: () => {
       setVideoFile(null);
@@ -128,29 +115,30 @@ export const CameraUploadModal: React.FC<CameraUploadModalProps> = ({
 
   return (
     <Modal
-      title={`Upload Video cho: ${camera?.name || ''}`}
+      title={`Upload Video cho: ${camera?.name || 'Camera mới'}`}
       open={open}
       onCancel={onCancel}
       destroyOnClose
-      footer={null} // Tắt footer mặc định, vì VideoUploadForm có nút "Submit" riêng
-      width={640} // Rộng hơn
+      footer={null} 
+      width={640} 
     >
-      {/* [CẬP NHẬT] 
-        Render VideoUploadForm bên trong Modal và truyền props
-      */}
-      <div style={{ paddingTop: '16px' }}> {/* Thêm chút padding */}
+      <div style={{ paddingTop: '16px' }}>
         <VideoUploadForm
           form={form}
           loading={loading}
           onFinish={handleUpload}
           uploadProps={uploadProps}
-          cameraList={cameraList} // <-- Truyền danh sách camera
-          cameraListLoading={cameraListLoading} // <-- Truyền trạng thái loading
-          onAddNewCameraClick={onAddNewCameraClick} // <-- Truyền hàm mở modal "Add"
+          cameraList={cameraList} 
+          cameraListLoading={cameraListLoading} 
+          onAddNewCameraClick={onAddNewCameraClick} 
           initialValues={{
+            cameraId: camera?.camera_id, 
+            videoId: camera ? `${camera.camera_id}_${new Date().getTime()}` : undefined,
             timestampStart: pageEnterISORef.current,
             mediaName: '0',
           }}
+          initialCameraId={camera?.camera_id} 
+          initialCameraName={camera?.name} // Truyền tên để component con hiển thị
         />
       </div>
     </Modal>
