@@ -4,7 +4,9 @@ import {
   SearchOutlined,
   DashboardOutlined,
   VideoCameraAddOutlined,
-  CameraOutlined, // <-- ICON MỚI
+  CameraOutlined,
+  AlertOutlined, // <-- Icon cho Violence Detection
+  HistoryOutlined, // <-- Icon cho Danh sách lịch sử
 } from '@ant-design/icons';
 
 const { Sider } = Layout;
@@ -16,7 +18,9 @@ export const SidebarAntd: React.FC = () => {
     const hash = window.location.hash;
     if (hash === '#/upload') return 'upload';
     if (hash === '#/search') return 'search';
-    if (hash === '#/cameras') return 'cameras'; // <-- KEY MỚI
+    if (hash === '#/cameras') return 'cameras';
+    if (hash === '#/violence-detection') return 'violence-detection'; // <-- KEY MỚI
+    if (hash === '#/violence-list') return 'violence-list'; // <-- KEY MỚI
     if (hash.startsWith('#/job/')) return 'dashboard';
     return 'dashboard';
   };
@@ -46,10 +50,16 @@ export const SidebarAntd: React.FC = () => {
         boxShadow: '4px 0 12px rgba(0, 0, 0, 0.03)',
         display: 'flex',
         flexDirection: 'column',
+        height: '100vh', // Đảm bảo full chiều cao
+        position: 'fixed', // Cố định sidebar
+        left: 0,
+        top: 0,
+        bottom: 0,
+        zIndex: 1000,
       }}
     >
       
-      {/* Logo Section (Giữ nguyên) */}
+      {/* Logo Section */}
       <div
         style={{
           height: '72px',
@@ -71,7 +81,6 @@ export const SidebarAntd: React.FC = () => {
             gap: '12px'
           }}
         >
-          {/* Icon */}
           <div
             style={{
               width: '40px',
@@ -83,15 +92,11 @@ export const SidebarAntd: React.FC = () => {
               justifyContent: 'center',
               fontSize: '20px',
               boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)',
-              transition: 'transform 0.2s',
             }}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
           >
             ✨
           </div>
           
-          {/* Text logo */}
           {!collapsed && (
             <div style={{ overflow: 'hidden' }}>
               <h1
@@ -122,7 +127,7 @@ export const SidebarAntd: React.FC = () => {
         </a>
       </div>
 
-      {/* Menu Section (Đã cập nhật) */}
+      {/* Menu Section */}
       <div style={{ 
         padding: '16px 12px',
         flex: 1,
@@ -137,10 +142,11 @@ export const SidebarAntd: React.FC = () => {
             background: 'transparent',
           }}
           onClick={({ key }) => {
-            // Xử lý navigation trực tiếp
             if (key === 'dashboard') window.location.hash = '#/';
             if (key === 'upload') window.location.hash = '#/upload';
-            if (key === 'cameras') window.location.hash = '#/cameras'; // <-- LINK MỚI
+            if (key === 'cameras') window.location.hash = '#/cameras';
+            if (key === 'violence-detection') window.location.hash = '#/violence-detection'; // <-- Link
+            if (key === 'violence-list') window.location.hash = '#/violence-list'; // <-- Link
             if (key === 'search') window.location.hash = '#/search';
           }}
           items={[
@@ -156,19 +162,34 @@ export const SidebarAntd: React.FC = () => {
               label: <span style={menuLabelStyle}>Upload Video</span>,
               style: menuStyle
             },
-            // --- [MỤC MỚI] ---
             {
               key: 'cameras',
               icon: <CameraOutlined style={{ fontSize: '18px' }} />,
               label: <span style={menuLabelStyle}>Quản lý Camera</span>,
               style: menuStyle
             },
-            // --- [HẾT MỤC MỚI] ---
+            // --- [MỤC MỚI BẠN YÊU CẦU] ---
+            {
+              type: 'divider', // Thêm dòng kẻ ngăn cách cho đẹp
+            },
+            {
+              key: 'violence-detection',
+              icon: <AlertOutlined style={{ fontSize: '18px', color: '#cf1322' }} />, // Màu đỏ cho cảnh báo
+              label: <span style={{ ...menuLabelStyle, color: '#cf1322' }}>Violence Detection</span>,
+              style: menuStyle
+            },
+            {
+              key: 'violence-list',
+              icon: <HistoryOutlined style={{ fontSize: '18px' }} />,
+              label: <span style={menuLabelStyle}>Danh sách bạo lực</span>,
+              style: menuStyle
+            },
+            // ------------------------------
           ]}
         />
       </div>
 
-      {/* Search Button (Giữ nguyên) */}
+      {/* Search Button */}
       <div
         style={{
           padding: collapsed ? '16px 8px' : '16px 16px 20px 16px',
@@ -195,14 +216,6 @@ export const SidebarAntd: React.FC = () => {
             justifyContent: 'center',
             gap: '8px',
             transition: 'all 0.3s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(-2px)';
-            e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.4)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 4px 16px rgba(16, 185, 129, 0.3)';
           }}
         >
           {!collapsed && 'Tìm kiếm Nâng cao'}

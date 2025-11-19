@@ -1,15 +1,23 @@
-// File: src/components/upload/AddCameraModal.tsx
 import React, { useState } from 'react';
-import { Modal, Form, Input, Select, Switch, message, Button } from 'antd';
-import type { Camera, NewCameraData } from '../../types';
+import { 
+  Modal, 
+  Form, 
+  Input, 
+  Select, 
+  Switch, 
+  message, 
+  Button, 
+  InputNumber, 
+  Row, 
+  Col 
+} from 'antd';
+import type { Camera } from '../../types';
 import { apiService } from '../../services/api.service';
-// Đảm bảo bạn đã export các hàm/types này từ service và types
-
 
 interface AddCameraModalProps {
   open: boolean;
   onCancel: () => void;
-  onSuccess: (newCamera: Camera) => void; // Callback khi thêm thành công
+  onSuccess: (newCamera: Camera) => void;
 }
 
 const { Option } = Select;
@@ -17,34 +25,48 @@ const { Option } = Select;
 export const AddCameraModal: React.FC<AddCameraModalProps> = ({ open, onCancel, onSuccess }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
-  // State để hiển thị đúng input (Stream URL hoặc Video Path)
   const [sourceType, setSourceType] = useState<'stream' | 'video'>('stream');
 
   const handleFinish = async (values: any) => {
     setLoading(true);
     
-    // Chuẩn bị data để POST
-    const postData: Partial<NewCameraData> = {
-      ...values,
-      is_active: values.is_active ?? true,
-      config: values.config ? JSON.parse(values.config) : {}, // Parse JSON config
-    };
+    // CHỈNH SỬA QUAN TRỌNG:
+    // Không dùng lệnh 'delete'. Luôn gửi đầy đủ các trường.
+    // Trường nào không dùng thì gửi chuỗi rỗng "" hoặc 0.
     
-    // Xóa trường không liên quan
-    if (postData.source_type === 'stream') {
-      delete postData.video_path;
-    } else {
-      delete postData.stream_url;
-    }
+    const postData = {
+      camera_id: values.camera_id,
+      name: values.name,
+      source_type: values.source_type,
+      
+      // Logic xử lý URL/Path: Gửi chuỗi rỗng "" nếu không dùng, không được xóa key
+      stream_url: values.source_type === 'stream' ? (values.stream_url || "") : "",
+      video_path: values.source_type === 'video' ? (values.video_path || "") : "",
+      
+      location: values.location || "", // Gửi chuỗi rỗng nếu user không nhập
+      
+      // Tọa độ: Mặc định là 0 nếu user không nhập
+      lat: values.lat ?? 0,
+      lon: values.lon ?? 0,
+      
+      description: values.description || "",
+      is_active: values.is_active ?? true,
+      
+      // Config: Luôn phải là Object {}, không được null
+      config: values.config ? JSON.parse(values.config) : {}, 
+    };
+
+    console.log('Payload gửi đi:', postData); // F12 để kiểm tra
 
     try {
-      // Giả định apiService.addCamera(...)
       const newCamera = await apiService.addCamera(postData); 
       message.success(`Thêm camera '${newCamera.name}' thành công!`);
       form.resetFields();
-      onSuccess(newCamera); // Trả camera mới về component cha (Page)
+      setSourceType('stream');
+      onSuccess(newCamera); 
     } catch (error: any) {
-      message.error(`Lỗi khi thêm camera: ${error.message}`);
+      console.error(error);
+      message.error(`Lỗi server: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -55,7 +77,8 @@ export const AddCameraModal: React.FC<AddCameraModalProps> = ({ open, onCancel, 
       title="Thêm Camera Mới"
       open={open}
       onCancel={onCancel}
-      destroyOnClose // Reset form fields khi đóng
+      destroyOnClose
+      width={650}
       footer={[
         <Button key="back" onClick={onCancel}>
           Hủy bỏ
@@ -69,7 +92,12 @@ export const AddCameraModal: React.FC<AddCameraModalProps> = ({ open, onCancel, 
         form={form}
         layout="vertical"
         onFinish={handleFinish}
-        initialValues={{ is_active: true, source_type: 'stream' }}
+        initialValues={{ 
+          is_active: true, 
+          source_type: 'stream',
+          lat: 0,
+          lon: 0
+        }}
       >
         <Form.Item
           label="Camera ID"
@@ -98,7 +126,6 @@ export const AddCameraModal: React.FC<AddCameraModalProps> = ({ open, onCancel, 
           </Select>
         </Form.Item>
 
-        {/* Hiển thị input tương ứng với Source Type */}
         {sourceType === 'stream' ? (
           <Form.Item
             label="Stream URL"
@@ -117,12 +144,45 @@ export const AddCameraModal: React.FC<AddCameraModalProps> = ({ open, onCancel, 
           </Form.Item>
         )}
         
-        <Form.Item label="Vị trí (Location)" name="location">
+        <Form.Item label="Tên địa điểm (Location Name)" name="location">
           <Input placeholder="Vd: Tầng 1, Khu A" />
         </Form.Item>
+
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form.Item 
+              label="Vĩ độ (Latitude)" 
+              name="lat"
+              rules={[{ type: 'number', message: 'Phải là số!' }]}
+            >
+              <InputNumber 
+                style={{ width: '100%' }} 
+                placeholder="Vd: 21.028511" 
+                step="0.000001" 
+                min={-90}
+                max={90}
+              />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item 
+              label="Kinh độ (Longitude)" 
+              name="lon"
+              rules={[{ type: 'number', message: 'Phải là số!' }]}
+            >
+              <InputNumber 
+                style={{ width: '100%' }} 
+                placeholder="Vd: 105.854444" 
+                step="0.000001"
+                min={-180}
+                max={180}
+              />
+            </Form.Item>
+          </Col>
+        </Row>
         
         <Form.Item label="Mô tả (Description)" name="description">
-          <Input.TextArea rows={2} placeholder="Mô tả thêm (không bắt buộc)" />
+          <Input.TextArea rows={2} placeholder="Mô tả thêm" />
         </Form.Item>
 
         <Form.Item label="Config (JSON)" name="config"
@@ -134,12 +194,12 @@ export const AddCameraModal: React.FC<AddCameraModalProps> = ({ open, onCancel, 
                 JSON.parse(value);
                 return Promise.resolve();
               } catch (e) {
-                return Promise.reject(new Error('Chuỗi JSON không hợp lệ'));
+                return Promise.reject(new Error('JSON sai định dạng'));
               }
             }
           }]}
         >
-          <Input.TextArea rows={2} placeholder='{}' />
+          <Input.TextArea rows={2} placeholder='{}' style={{ fontFamily: 'monospace' }} />
         </Form.Item>
         
         <Form.Item label="Kích hoạt (Is Active)" name="is_active" valuePropName="checked">

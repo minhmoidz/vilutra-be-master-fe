@@ -2,12 +2,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronLeft } from 'lucide-react';
-import { Card, Descriptions, Tag, Spin, Alert, Empty, message, Image, Tooltip, Divider, Button, Modal } from 'antd';
+import { Card, Descriptions, Tag, Spin, Alert, Empty, message, Image, Button, Modal, Tooltip, Divider } from 'antd';
 import { LoadingOutlined, VideoCameraOutlined, CalendarOutlined, InfoCircleOutlined, EnvironmentOutlined, ZoomInOutlined } from '@ant-design/icons';
 import { apiService } from '../../services/api.service';
 import { formatDate } from '../../utils/dateFormat';
 import { API_CONFIG } from '../../config/api.config';
-import type { Job } from '../../types';
+import type { Job, Camera} from '../../types';
 
 // Type definitions for Google Maps
 declare global {
@@ -21,15 +21,7 @@ interface JobDetailProps {
   onBack: () => void;
 }
 
-// Định nghĩa tọa độ camera
-const CAMERA_POSITIONS = [
-  { id: 1, lat: 21.0285, lng: 105.8542, label: 'CAM 1', address: 'Vị trí Camera 1' },
-  { id: 2, lat: 21.0295, lng: 105.8552, label: 'CAM 2', address: 'Vị trí Camera 2' },
-  { id: 3, lat: 21.0275, lng: 105.8547, label: 'CAM 3', address: 'Vị trí Camera 3' }, 
-  { id: 4, lat: 21.0280, lng: 105.8557, label: 'CAM 4', address: 'Vị trí Camera 4' }, 
-  { id: 5, lat: 21.0290, lng: 105.8537, label: 'CAM 5', address: 'Vị trí Camera 5' }, 
-];
-
+// Key Google Maps
 const GOOGLE_MAPS_API_KEY = 'AIzaSyAjJ3aT8qkpWtHVfb2AgWPlBtCUFU0EY4c';
 
 const getAntdStatusColor = (status: string): string => {
@@ -44,9 +36,11 @@ const getAntdStatusColor = (status: string): string => {
 
 export const JobDetailAntd: React.FC<JobDetailProps> = ({ jobId, onBack }) => {
   const [job, setJob] = useState<Job | null>(null);
+  const [allCameras, setAllCameras] = useState<Camera[]>([]); 
   const [loading, setLoading] = useState(false);
   const [isPolling, setIsPolling] = useState(true);
-  const [selectedCamera, setSelectedCamera] = useState<number | null>(null);
+  
+  const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
   
@@ -54,22 +48,33 @@ export const JobDetailAntd: React.FC<JobDetailProps> = ({ jobId, onBack }) => {
   const googleMapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
 
-  const loadJobDetail = async () => {
-    setLoading(true);
-    try {
-      const data = await apiService.getJobDetail(jobId);
-      setJob(data);
+  // 1. Tải dữ liệu
+  const loadData = async () => {
+    if (job && (job.status === 'COMPLETED' || job.status === 'FAILED') && allCameras.length > 0) {
+        return;
+    }
 
-      const shouldContinuePolling = data.status !== 'COMPLETED' && data.status !== 'FAILED';
+    try {
+      if (!job) setLoading(true);
+
+      const [jobData, camerasData] = await Promise.all([
+        apiService.getJobDetail(jobId),
+        allCameras.length === 0 ? apiService.getCameras() : Promise.resolve(allCameras)
+      ]);
+
+      setJob(jobData);
+      if (allCameras.length === 0) {
+          setAllCameras(camerasData);
+      }
+
+      const shouldContinuePolling = jobData.status !== 'COMPLETED' && jobData.status !== 'FAILED';
       setIsPolling(shouldContinuePolling);
 
       if (shouldContinuePolling) {
-        setTimeout(() => {
-          loadJobDetail();
-        }, API_CONFIG.POLL_INTERVAL);
+        setTimeout(loadData, API_CONFIG.POLL_INTERVAL);
       }
     } catch (error: any) {
-      message.error('Lỗi khi tải job detail: ' + error.message);
+      message.error('Lỗi tải dữ liệu: ' + error.message);
       setIsPolling(false);
     } finally {
       setLoading(false);
@@ -77,12 +82,17 @@ export const JobDetailAntd: React.FC<JobDetailProps> = ({ jobId, onBack }) => {
   };
 
   useEffect(() => {
+    loadData();
+    return () => setIsPolling(false);
+  }, [jobId]);
+
+  // 2. Load Maps Script
+  useEffect(() => {
     const loadGoogleMapsScript = () => {
       if (window.google && window.google.maps) {
         setMapLoaded(true);
         return;
       }
-
       const script = document.createElement('script');
       script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=marker`;
       script.async = true;
@@ -91,99 +101,133 @@ export const JobDetailAntd: React.FC<JobDetailProps> = ({ jobId, onBack }) => {
       script.onerror = () => message.error('Không thể tải Google Maps');
       document.head.appendChild(script);
     };
-
     loadGoogleMapsScript();
   }, []);
 
+  // 3. Xử lý Map: LUÔN HIỂN THỊ TẤT CẢ CAMERA
   useEffect(() => {
-    if (!mapLoaded || !mapRef.current || !job) return;
+    if (!mapLoaded || !mapRef.current || !job || allCameras.length === 0) return;
 
     const google = window.google;
     if (!google) return;
 
-    const map = new google.maps.Map(mapRef.current, {
-      center: { lat: 21.0285, lng: 105.8542 }, 
-      zoom: 18, 
-      mapTypeId: 'roadmap',
-      streetViewControl: false,
-      mapTypeControl: true,
-      fullscreenControl: true,
-    });
+    if (!googleMapRef.current) {
+      googleMapRef.current = new google.maps.Map(mapRef.current, {
+        center: { lat: 21.0285, lng: 105.8542 },
+        zoom: 13, // Zoom xa hơn chút để nhìn tổng quan
+        mapTypeId: 'roadmap',
+      });
+    }
 
-    googleMapRef.current = map;
+    const map = googleMapRef.current;
 
+    // Xóa marker cũ
     markersRef.current.forEach((marker: any) => marker.setMap(null));
     markersRef.current = [];
 
-    CAMERA_POSITIONS.forEach((camera) => {
-      const cameraFrames = getFramesByCamera(camera.id);
-      const hasFrames = cameraFrames.length > 0;
+    const bounds = new google.maps.LatLngBounds();
+    let hasValidCamera = false;
 
+    // --- LOGIC MỚI ---
+    // Duyệt qua TOÀN BỘ danh sách Camera có trong hệ thống
+    allCameras.forEach((camera) => {
+      // Bỏ qua nếu camera không có tọa độ hợp lệ
+      if (!camera.lat || !camera.lon) return;
+      
+      hasValidCamera = true;
+      const position = { lat: Number(camera.lat), lng: Number(camera.lon) };
+
+      // Tìm xem trong Job hiện tại, Camera này có frame nào không
+      const relatedFrames = job.frames 
+        ? job.frames.filter((f: any) => (f.camera_id === camera.camera_id) || (f.cameraId === camera.camera_id))
+        : [];
+      
+      const hasDetection = relatedFrames.length > 0;
+
+      // Cấu hình Marker dựa trên việc có detect hay không
       const marker = new google.maps.Marker({
-        position: { lat: camera.lat, lng: camera.lng },
+        position: position,
         map: map,
-        title: `${camera.label} - ${hasFrames ? `${cameraFrames.length} frames` : 'Không có frames'}`,
-        label: {
-          text: camera.id.toString(),
+        title: camera.name,
+        // Nếu có detection thì hiện số lượng, không thì để trống hoặc hiện tên
+        label: hasDetection ? {
+          text: relatedFrames.length.toString(),
           color: 'white',
-          fontSize: '14px',
+          fontSize: '12px',
           fontWeight: 'bold',
-        },
+        } : undefined,
+        // Z-Index: Camera có kết quả thì nổi lên trên
+        zIndex: hasDetection ? 100 : 1, 
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
-          scale: hasFrames ? 20 : 15,
-          fillColor: hasFrames ? '#ef4444' : '#9ca3af',
-          fillOpacity: hasFrames ? 1 : 0.6,
+          scale: hasDetection ? 18 : 10, // Có kết quả thì to hơn
+          // Màu đỏ nếu có kết quả, Màu xám nếu không
+          fillColor: hasDetection ? '#ef4444' : '#9ca3af', 
+          fillOpacity: hasDetection ? 1 : 0.7,
           strokeColor: 'white',
-          strokeWeight: 3,
+          strokeWeight: 2,
         },
-        animation: hasFrames ? google.maps.Animation.BOUNCE : undefined,
+        // Chỉ nhảy animation nếu có kết quả
+        animation: hasDetection ? google.maps.Animation.DROP : undefined,
       });
 
-      if (hasFrames) {
-        marker.addListener('click', () => {
-          setSelectedCamera(camera.id);
-          setModalVisible(true);
-        });
-      }
-
+      // Info Window
       const infoWindow = new google.maps.InfoWindow({
         content: `
-          <div style="padding: 10px;">
-            <h3 style="margin: 0 0 8px 0; color: #1f2937; font-weight: bold;">${camera.label}</h3>
-            <p style="margin: 0; color: #6b7280; font-size: 13px;">${camera.address}</p>
-            <p style="margin: 8px 0 0 0; color: ${hasFrames ? '#ef4444' : '#9ca3af'}; font-weight: bold;">
-              ${hasFrames ? `📹 ${cameraFrames.length} frames` : '❌ Không có dữ liệu'}
+          <div style="padding: 8px;">
+            <h3 style="margin: 0; font-weight: bold; color: ${hasDetection ? '#ef4444' : 'black'}">${camera.name}</h3>
+            <p style="margin: 4px 0 0; color: gray; font-size: 12px;">${camera.location || 'Chưa có vị trí cụ thể'}</p>
+            <p style="margin: 4px 0 0; font-weight: bold;">
+              ${hasDetection 
+                ? `<span style="color: #ef4444">✅ Tìm thấy: ${relatedFrames.length} kết quả</span>` 
+                : `<span style="color: #9ca3af">⚪ Không có kết quả</span>`
+              }
             </p>
+             ${hasDetection ? '<p style="margin: 4px 0 0; font-style: italic; font-size: 11px; color: blue;">(Click để xem chi tiết)</p>' : ''}
           </div>
         `,
       });
 
-      marker.addListener('mouseover', () => {
-        infoWindow.open(map, marker);
-      });
+      marker.addListener('mouseover', () => infoWindow.open(map, marker));
+      marker.addListener('mouseout', () => infoWindow.close());
 
-      marker.addListener('mouseout', () => {
-        infoWindow.close();
+      // Sự kiện Click
+      marker.addListener('click', () => {
+        if (hasDetection) {
+          // Chỉ mở Modal nếu có detection
+          setSelectedCameraId(camera.camera_id);
+          setModalVisible(true);
+        } else {
+          // Nếu không có detection, có thể hiển thị thông báo nhỏ hoặc chỉ mở info window (đã mở khi hover)
+          message.info(`Camera "${camera.name}" không ghi nhận kết quả nào trong Job này.`);
+        }
       });
 
       markersRef.current.push(marker);
+      bounds.extend(position);
     });
 
-  }, [mapLoaded, job]);
-
-  useEffect(() => {
-    loadJobDetail();
-    return () => {
-      setIsPolling(false);
-      markersRef.current.forEach((marker: any) => marker.setMap(null));
+    // Fit map để nhìn thấy tất cả các camera (kể cả không detect)
+    if (hasValidCamera) {
+      map.fitBounds(bounds);
+      // Nếu zoom quá gần thì zoom out bớt
+      const listener = google.maps.event.addListener(map, "idle", () => { 
+        if (map.getZoom() > 18) map.setZoom(18); 
+        google.maps.event.removeListener(listener); 
+      });
     }
-  }, [jobId]);
 
-  const getFramesByCamera = (cameraId: number) => {
-    if (!job?.frames) return [];
-    return job.frames.filter((_, idx) => (idx % 5) + 1 === cameraId);
+  }, [mapLoaded, job, allCameras]);
+
+  const getSelectedCameraFrames = () => {
+    if (!job?.frames || !selectedCameraId) return [];
+    return job.frames.filter((f: any) => 
+      (f.camera_id === selectedCameraId) || (f.cameraId === selectedCameraId)
+    );
   };
+
+  const selectedFrames = getSelectedCameraFrames();
+  const currentCameraDetail = allCameras.find(c => c.camera_id === selectedCameraId);
 
   if (!job) {
     return (
@@ -192,8 +236,6 @@ export const JobDetailAntd: React.FC<JobDetailProps> = ({ jobId, onBack }) => {
       </div>
     );
   }
-
-  const selectedCameraFrames = selectedCamera ? getFramesByCamera(selectedCamera) : [];
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -211,7 +253,7 @@ export const JobDetailAntd: React.FC<JobDetailProps> = ({ jobId, onBack }) => {
         </header>
         
         {(loading || isPolling) && job.status !== 'COMPLETED' && job.status !== 'FAILED' && (
-              <Alert
+            <Alert
                 message="Đang Cập nhật Trạng thái"
                 description={`Job đang ở trạng thái ${job.status}. Hệ thống đang tự động tải lại.`}
                 type="info"
@@ -221,6 +263,7 @@ export const JobDetailAntd: React.FC<JobDetailProps> = ({ jobId, onBack }) => {
             />
         )}
 
+        {/* --- THÔNG TIN JOB --- */}
         <Card 
             title={<span className="flex items-center gap-2 text-lg font-semibold"><InfoCircleOutlined /> Tổng quan Job</span>} 
             className="mb-8 shadow-xl border-t-4 border-indigo-500"
@@ -254,11 +297,10 @@ export const JobDetailAntd: React.FC<JobDetailProps> = ({ jobId, onBack }) => {
                 {job.imageUrl && (
                     <>
                         <p className="text-sm text-gray-500 mb-3 font-medium">Ảnh đã upload:</p>
-                        {/* CẬP NHẬT: Ảnh Input to tự nhiên (w-full, h-auto) */}
                         <Image
                             src={job.imageUrl}
                             alt="Uploaded"
-                            className="w-full h-auto rounded-lg border-2 border-indigo-100 shadow-md" 
+                            className="w-full h-auto rounded-lg border-2 border-indigo-100 shadow-md max-w-md" 
                             preview={{ mask: "Xem ảnh lớn" }}
                             fallback="https://via.placeholder.com/600x400?text=Image+Not+Found"
                         />
@@ -266,17 +308,15 @@ export const JobDetailAntd: React.FC<JobDetailProps> = ({ jobId, onBack }) => {
                 )}
             </div>
           )}
-          {job.errorMessage && (
-            <Alert message="Lỗi xử lý" description={job.errorMessage} type="error" showIcon className="mt-6" />
-          )}
         </Card>
 
+        {/* --- BẢN ĐỒ CAMERA (LUÔN HIỆN TẤT CẢ) --- */}
         <Card 
             title={
                 <span className="flex items-center gap-2 text-lg font-semibold">
-                    <EnvironmentOutlined /> Bản đồ Camera (Google Maps)
+                    <EnvironmentOutlined /> Bản đồ Kết quả
                     {job.frames && job.frames.length > 0 && (
-                        <Tag color="volcano" className="ml-2 font-medium">{job.frames.length} frames</Tag>
+                        <Tag color="volcano" className="ml-2 font-medium">{job.frames.length} frames tìm thấy</Tag>
                     )}
                 </span>
             } 
@@ -286,12 +326,24 @@ export const JobDetailAntd: React.FC<JobDetailProps> = ({ jobId, onBack }) => {
             <div className="flex justify-center items-center h-96"><Spin tip="Đang tải Google Maps..." /></div>
           ) : (
             <>
-              <div ref={mapRef} className="w-full h-[600px] rounded-lg" style={{ minHeight: '600px' }} />
+              <div ref={mapRef} className="w-full h-[600px] rounded-lg border border-gray-300" style={{ minHeight: '600px' }} />
+              
               <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-sm text-blue-800">
-                  <InfoCircleOutlined className="mr-2" />
-                  <strong>Hướng dẫn:</strong> Bản đồ hiển thị khu vực chi tiết (zoom 18). Click vào marker camera để xem frames.
-                </p>
+                <div className="flex flex-col gap-2 text-sm text-blue-800">
+                  <div className="flex items-center gap-2">
+                    <InfoCircleOutlined /> <strong>Chú thích:</strong>
+                  </div>
+                  <div className="flex items-center gap-6 ml-6">
+                     <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full bg-red-500 inline-block"></span> 
+                        <span>Camera có phát hiện (Click để xem)</span>
+                     </div>
+                     <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full bg-gray-400 inline-block"></span> 
+                        <span>Camera không có phát hiện</span>
+                     </div>
+                  </div>
+                </div>
               </div>
             </>
           )}
@@ -301,12 +353,15 @@ export const JobDetailAntd: React.FC<JobDetailProps> = ({ jobId, onBack }) => {
         <Modal
           title={
             <div className="flex items-center justify-between pr-8 py-3">
-              <span className="text-2xl font-bold flex items-center text-gray-800">
-                <VideoCameraOutlined className="mr-3 text-indigo-600" />
-                Camera {selectedCamera}
-              </span>
+              <div className="flex flex-col">
+                <span className="text-2xl font-bold flex items-center text-gray-800">
+                  <VideoCameraOutlined className="mr-3 text-indigo-600" />
+                  {currentCameraDetail ? currentCameraDetail.name : `Camera ${selectedCameraId}`}
+                </span>
+                <span className="text-xs text-gray-500 ml-9 font-normal">ID: {selectedCameraId}</span>
+              </div>
               <Tag color="blue" className="text-lg px-4 py-1 rounded">
-                {selectedCameraFrames.length} kết quả
+                {selectedFrames.length} kết quả
               </Tag>
             </div>
           }
@@ -317,26 +372,19 @@ export const JobDetailAntd: React.FC<JobDetailProps> = ({ jobId, onBack }) => {
           centered
           bodyStyle={{ padding: '24px', backgroundColor: '#f8fafc' }}
         >
-          {selectedCameraFrames.length === 0 ? (
+          {selectedFrames.length === 0 ? (
             <Empty description="Không có frames nào" image={Empty.PRESENTED_IMAGE_SIMPLE} />
           ) : (
-            // Grid 2 cột để ảnh có nhiều không gian
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-h-[85vh] overflow-y-auto pr-2 custom-scrollbar"> 
-              {selectedCameraFrames.map((frame, index) => (
+              {selectedFrames.map((frame, index) => (
                 <div 
                   key={frame.id}
                   className="group bg-white rounded-2xl shadow-md border border-gray-200 overflow-hidden hover:shadow-2xl hover:-translate-y-1 transition-all duration-300"
                 >
-                  {/* CẬP NHẬT QUAN TRỌNG Ở ĐÂY:
-                     - Xóa 'h-80'.
-                     - Dùng 'w-full h-auto' để ảnh tự do giãn theo chiều cao thực tế.
-                     - Đặt background gray để dễ nhìn viền.
-                  */}
                   <div className="relative w-full h-auto bg-gray-100">
                     <Image
                       alt={`Frame ${index + 1}`}
                       src={frame.imageUrl}
-                      // Class này giúp ảnh to hết cỡ, không bị crop
                       className="w-full h-auto object-contain min-h-[200px]" 
                       fallback="https://via.placeholder.com/600x400?text=Image+Not+Found"
                       preview={{ 
@@ -352,7 +400,6 @@ export const JobDetailAntd: React.FC<JobDetailProps> = ({ jobId, onBack }) => {
                       }} 
                     />
                     
-                    {/* Badge thời gian */}
                     <div className="absolute top-4 right-4">
                         <div className="bg-black/70 text-white px-3 py-1 rounded-full backdrop-blur-md text-sm font-medium flex items-center gap-2">
                             <CalendarOutlined /> {formatDate(frame.frameTime)}
@@ -360,7 +407,6 @@ export const JobDetailAntd: React.FC<JobDetailProps> = ({ jobId, onBack }) => {
                     </div>
                   </div>
 
-                  {/* Thông tin chi tiết */}
                   <div className="p-6 border-t border-gray-100">
                     <div className="flex items-center justify-between mb-4">
                         <span className="text-sm font-bold text-gray-400 uppercase tracking-wider">Frame ID</span>

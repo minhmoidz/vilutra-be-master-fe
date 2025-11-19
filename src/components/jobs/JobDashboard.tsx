@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Layout, message } from 'antd';
 import { JobListAntd, type JobListHandle } from './JobList';
@@ -8,11 +6,13 @@ import { SearchPageAntd } from '../search/SearchModal';
 import { JobDetailAntd } from './JobDetail';
 import { SidebarAntd } from '../layout/SidebarAntd';
 import { CameraManagementPage } from '../cameras/CameraManagementPage';
+import { ViolenceDetectionPage } from '../violence/ViolenceDetectionPage';
+import { ViolenceListPage } from '../violence/ViolenceListPage';
 
 const { Content } = Layout;
 
-// [CẬP NHẬT] Định nghĩa các view mà chúng ta có
-type ViewType = 'list' | 'detail' | 'upload' | 'search' | 'cameras';
+// [CẬP NHẬT] Thêm 'violence-detection' và 'violence-list' vào định nghĩa view
+type ViewType = 'list' | 'detail' | 'upload' | 'search' | 'cameras' | 'violence-detection' | 'violence-list';
 
 export const JobDashboard: React.FC = () => {
   // State quản lý view hiện tại
@@ -31,10 +31,20 @@ export const JobDashboard: React.FC = () => {
       } else if (hash === '#/search') {
         setCurrentView('search');
         setCurrentJobId(null);
-      // [THÊM MỚI] Xử lý route camera
       } else if (hash === '#/cameras') { 
         setCurrentView('cameras');
         setCurrentJobId(null);
+      
+      // [THÊM MỚI] Route cho trang Detection
+      } else if (hash === '#/violence-detection') {
+        setCurrentView('violence-detection');
+        setCurrentJobId(null);
+      
+      // [THÊM MỚI] Route cho trang List
+      } else if (hash === '#/violence-list') {
+        setCurrentView('violence-list');
+        setCurrentJobId(null);
+
       } else if (hash.startsWith('#/job/')) {
         setCurrentView('detail');
         setCurrentJobId(hash.substring(6)); // Lấy ID sau #/job/
@@ -88,9 +98,16 @@ export const JobDashboard: React.FC = () => {
       case 'search':
         return <SearchPageAntd onSuccess={handleSearchSuccess} />;
       
-      // [THÊM MỚI] Render trang camera
       case 'cameras':
         return <CameraManagementPage />;
+
+      // [THÊM MỚI] Render trang Violence Detection
+      case 'violence-detection':
+        return <ViolenceDetectionPage />;
+
+      // [THÊM MỚI] Render trang Violence List
+      case 'violence-list':
+        return <ViolenceListPage />;
         
       case 'detail':
         if (!currentJobId) {
@@ -120,8 +137,8 @@ export const JobDashboard: React.FC = () => {
       <SidebarAntd />
 
       {/* Layout phụ bọc Content */}
-      <Layout className="site-layout">
-        <Content style={{ backgroundColor: '#f0f2f5' }}> 
+      <Layout className="site-layout" style={{ marginLeft: 260, transition: 'all 0.2s' }}>
+        <Content style={{ backgroundColor: '#f0f2f5', minHeight: '100vh' }}> 
           {renderContent()}
         </Content>
       </Layout>
