@@ -1,27 +1,54 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Typography, Card, Table, Tag, Space, Button, Input, message, Tooltip, InputNumber, Modal, Alert } from 'antd';
-import { SearchOutlined, CheckCircleOutlined, SyncOutlined, VideoCameraOutlined, PlayCircleOutlined, ExportOutlined } from '@ant-design/icons';
+import { 
+  Typography, Card, Table, Tag, Space, Button, Input, message, 
+  Tooltip, InputNumber, Modal, Alert, Image, Popconfirm, DatePicker, List 
+} from 'antd';
+import { 
+  SearchOutlined, CheckCircleOutlined, SyncOutlined, 
+  EyeOutlined, DeleteOutlined, 
+  ExclamationCircleOutlined, CheckCircleFilled 
+} from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
+import dayjs from 'dayjs';
 
-// Import Service & Types
+// Import Service
 import { violenceApiService, VIOLENCE_BASE_URL } from '../../services/violenceApi.service';
-import type { ViolenceIncident } from '../../types/violence';
+import { apiService } from '../../services/api.service';
+import type { ViolenceIncident, PersonClip } from '../../types/violence';
 
-const { Title } = Typography;
+const { Title, Text, Paragraph } = Typography;
+const { RangePicker } = DatePicker;
 
-export const ViolenceListPage: React.FC = () => {
+// --- 1. THÊM INTERFACE PROPS GIỐNG SEARCH PAGE ---
+interface ViolencePageProps {
+  onSuccess: (jobId: string) => void; // Callback để chuyển sang trang Detail
+}
+
+export const ViolenceListPage: React.FC<ViolencePageProps> = ({ onSuccess }) => {
+  // KHÔNG DÙNG REACT-ROUTER-DOM
+
+  // --- STATE ---
   const [data, setData] = useState<ViolenceIncident[]>([]);
   const [loading, setLoading] = useState(false);
-  
-  // State cho bộ lọc
   const [searchCameraId, setSearchCameraId] = useState('');
   const [searchLimit, setSearchLimit] = useState<number>(100);
+  
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [selectedIncident, setSelectedIncident] = useState<ViolenceIncident | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [selectedClipPath, setSelectedClipPath] = useState<string | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
 
-  // State cho Modal Video Player
-  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
-  const [currentVideoUrl, setCurrentVideoUrl] = useState('');
-  const [currentVideoName, setCurrentVideoName] = useState('');
-  const [videoError, setVideoError] = useState(false);
+  const [isDeleteRangeModalOpen, setIsDeleteRangeModalOpen] = useState(false);
+  const [deleteRangeCamId, setDeleteRangeCamId] = useState('');
+  const [deleteRangeDates, setDeleteRangeDates] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const getFullUrl = (relativePath: string) => {
+    if (!relativePath) return '';
+    const cleanPath = relativePath.startsWith('/') ? relativePath.substring(1) : relativePath;
+    return `${VIOLENCE_BASE_URL}/${cleanPath}`;
+  };
 
   const fetchIncidents = useCallback(async (camId?: string, limitVal: number = 100) => {
     setLoading(true);
@@ -29,7 +56,7 @@ export const ViolenceListPage: React.FC = () => {
       const incidents = await violenceApiService.getIncidents(camId || undefined, limitVal);
       setData(incidents || []);
     } catch (error: any) {
-      message.error('Lỗi tải danh sách sự cố: ' + error.message);
+      message.error('Lỗi tải danh sách: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -39,297 +66,235 @@ export const ViolenceListPage: React.FC = () => {
     fetchIncidents('', 100);
   }, [fetchIncidents]);
 
-  const handleReview = async (id: number) => {
+  const handleSearch = () => fetchIncidents(searchCameraId, searchLimit);
+
+  const handleViewDetail = async (record: ViolenceIncident) => {
+    setIsDetailModalOpen(true);
+    setDetailLoading(true);
+    setSelectedClipPath(null);
     try {
-      await violenceApiService.reviewIncident(id);
-      message.success(`Đã xác nhận sự cố #${id}`);
-      setData(prevData => prevData.map(item => 
-        item.id === id ? { ...item, is_reviewed: true } : item
-      ));
+      const detail = await violenceApiService.getIncidentDetail(record.id);
+      setSelectedIncident(detail);
     } catch (error: any) {
-      message.error('Lỗi xác nhận: ' + error.message);
-      fetchIncidents(searchCameraId, searchLimit);
+      message.error('Lỗi chi tiết: ' + error.message);
+      setSelectedIncident(record);
+    } finally {
+      setDetailLoading(false);
     }
   };
 
-  const handleSearch = () => {
-    fetchIncidents(searchCameraId, searchLimit);
+  // --- [QUAN TRỌNG] LOGIC TÌM KIẾM ĐÃ ĐƯỢC CẬP NHẬT ---
+  const handleSearchSelectedClip = async () => {
+    if (!selectedClipPath) {
+      message.warning('Vui lòng tích chọn một đối tượng ảnh bên dưới!');
+      return;
+    }
+
+    setIsSearching(true);
+    const key = 'search_msg';
+    message.loading({ content: 'Đang xử lý ảnh và tạo Job...', key });
+
+    try {
+      const originalUrl = getFullUrl(selectedClipPath);
+      // Xử lý Proxy để tránh lỗi CORS (Giữ nguyên logic của bạn)
+      const fetchUrl = originalUrl.includes('10.3.9.18:9001')
+        ? originalUrl.replace('http://10.3.9.18:9001', '/proxy-image')
+        : originalUrl;
+
+      // 1. Tải ảnh về Blob
+      const res = await fetch(fetchUrl);
+      if (!res.ok) throw new Error('Không thể tải ảnh (Lỗi Proxy/CORS)');
+      const blob = await res.blob();
+      const file = new File([blob], "search_clip.jpg", { type: blob.type });
+
+      // 2. Gọi API Search (Giống SearchPageAntd)
+      const response = await apiService.searchByImage(
+        file,
+        new Date().toISOString(),
+        60
+      );
+
+      // 3. Lấy Job ID (Sử dụng logic robust giống SearchPageAntd)
+      const jobId = response?.jobId || response?.id || response?.data?.jobId || response?.data?.id || response?.job_id;
+
+      if (jobId) {
+        message.success({ content: 'Tạo Job thành công! Đang chuyển trang...', key });
+        setIsDetailModalOpen(false); // Đóng modal chi tiết
+
+        // --- GỌI CALLBACK onSuccess THAY VÌ RELOAD TRANG ---
+        if (onSuccess) {
+            onSuccess(jobId);
+        } else {
+            // Fallback nếu không truyền props (để tránh lỗi)
+            window.location.href = `/?jobId=${jobId}`;
+        }
+        
+      } else {
+        console.error('API Response:', response);
+        message.warning({ content: 'Không nhận được Job ID từ server.', key });
+      }
+
+    } catch (error: any) {
+      console.error(error);
+      message.error({ content: 'Lỗi: ' + error.message, key });
+    } finally {
+      setIsSearching(false);
+    }
   };
 
-  const handleClear = () => {
-    setSearchCameraId('');
-    setSearchLimit(100);
-    fetchIncidents('', 100);
+  const handleReview = async (id: number) => {
+    try {
+      await violenceApiService.reviewIncident(id);
+      message.success(`Đã xác nhận #${id}`);
+      setData(prev => prev.map(item => item.id === id ? { ...item, is_reviewed: true } : item));
+      if (selectedIncident?.id === id) setSelectedIncident({ ...selectedIncident, is_reviewed: true });
+    } catch (e: any) { message.error(e.message); }
   };
 
-  // Helper tạo link video
-  const getVideoUrl = (relativePath: string) => {
-    if (!relativePath) return '';
-    const cleanPath = relativePath.startsWith('/') ? relativePath.substring(1) : relativePath;
-    return `${VIOLENCE_BASE_URL}/${cleanPath}`;
+  const handleDeleteItem = async (id: number) => {
+    try {
+      await violenceApiService.deleteIncident(id);
+      message.success('Đã xóa');
+      setData(prev => prev.filter(item => item.id !== id));
+      if (isDetailModalOpen) setIsDetailModalOpen(false);
+    } catch (e: any) { message.error(e.message); }
   };
 
-  // --- HÀM MỞ MODAL VIDEO ---
-  const handlePlayVideo = (videoPath: string) => {
-    if (!videoPath) return;
-    const fullUrl = getVideoUrl(videoPath);
-    const fileName = videoPath.split('/').pop() || 'Video';
-    
-    console.log("Attempting to play video:", fullUrl);
-
-    setVideoError(false);
-    setCurrentVideoUrl(fullUrl);
-    setCurrentVideoName(fileName);
-    setIsVideoModalOpen(true);
-  };
-
-  const handleCloseVideoModal = () => {
-    setIsVideoModalOpen(false);
-    setCurrentVideoUrl('');
-    setVideoError(false);
+  const handleDeleteRangeSubmit = async () => {
+    if (!deleteRangeCamId || !deleteRangeDates) {
+        message.warning('Thiếu thông tin xóa');
+        return;
+    }
+    const [start, end] = deleteRangeDates;
+    setDeleteLoading(true);
+    try {
+        await violenceApiService.deleteIncidentsByTimeRange(deleteRangeCamId, start.toISOString(), end.toISOString());
+        message.success('Đã xóa theo range');
+        setIsDeleteRangeModalOpen(false);
+        handleSearch();
+    } catch(e:any) { message.error(e.message); }
+    finally { setDeleteLoading(false); }
   };
 
   const columns: ColumnsType<ViolenceIncident> = [
-    {
-      title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
-      width: 80,
-      align: 'center',
-      render: (id) => <span style={{ fontWeight: 'bold' }}>#{id}</span>,
-      sorter: (a, b) => a.id - b.id,
+    { title: 'ID', dataIndex: 'id', width: 80, align: 'center', render: id => <b>#{id}</b> },
+    { title: 'Camera', dataIndex: 'camera_id', width: 120, render: t => <Tag color="blue">{t}</Tag> },
+    { title: 'Thời gian', dataIndex: 'timestamp', width: 180, render: t => t ? dayjs(t).format('DD/MM/YYYY HH:mm:ss') : '-' },
+    { 
+      title: 'Ảnh Frame', dataIndex: 'image_path', width: 140, 
+      render: p => p ? <Image src={getFullUrl(p)} width={100} height={60} style={{objectFit:'cover', borderRadius:4}}/> : '-' 
+    },
+    { 
+      title: 'Trạng thái', dataIndex: 'is_reviewed', width: 120, align: 'center',
+      render: r => <Tag color={r?'green':'volcano'}>{r?'Đã xử lý':'Mới'}</Tag>
     },
     {
-      title: 'Camera ID',
-      dataIndex: 'camera_id',
-      key: 'camera_id',
-      width: 150,
-      render: (text) => <Tag color="blue">{text}</Tag>
-    },
-    {
-      title: 'Thời gian phát hiện',
-      dataIndex: 'timestamp',
-      key: 'timestamp',
-      width: 180,
-      render: (time) => {
-        if (!time) return '-';
-        return new Date(time).toLocaleString('vi-VN', { hour12: false });
-      },
-      sorter: (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
-      defaultSortOrder: 'descend', 
-    },
-    {
-      title: 'Video Bằng chứng',
-      dataIndex: 'video_path',
-      key: 'video_path',
-      render: (path) => {
-        if (!path) return <span style={{ color: '#ccc' }}>Không có file</span>;
-        const fileName = path.split('/').pop();
-
-        return (
-          <Tooltip title="Bấm để xem ngay">
-            <div 
-              onClick={() => handlePlayVideo(path)}
-              style={{ 
-                display: 'inline-flex', 
-                alignItems: 'center', 
-                gap: 6, 
-                fontWeight: 500, 
-                cursor: 'pointer',
-                color: '#1890ff' 
-              }}
-            >
-              <VideoCameraOutlined style={{ fontSize: 16 }} />
-              <span style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'underline' }}>
-                {fileName}
-              </span>
-            </div>
-          </Tooltip>
-        );
-      }
-    },
-    {
-      title: 'Trạng thái',
-      dataIndex: 'is_reviewed',
-      key: 'is_reviewed',
-      width: 140,
-      align: 'center',
-      render: (reviewed) => (
-        <Tag color={reviewed ? 'green' : 'volcano'} style={{ minWidth: 80, textAlign: 'center' }}>
-          {reviewed ? 'Đã xử lý' : 'Chưa xem'}
-        </Tag>
-      ),
-      filters: [
-        { text: 'Đã xử lý', value: true },
-        { text: 'Chưa xem', value: false },
-      ],
-      onFilter: (value, record) => record.is_reviewed === value,
-    },
-    {
-      title: 'Hành động',
-      key: 'action',
-      width: 120,
-      align: 'right',
-      render: (_, record) => (
+      title: 'Hành động', key: 'action', align: 'right', width: 150,
+      render: (_, r) => (
         <Space size="small">
-          {record.video_path && (
-            <Tooltip title="Xem Video">
-              <Button 
-                size="small" 
-                icon={<PlayCircleOutlined />} 
-                onClick={() => handlePlayVideo(record.video_path)}
-              />
-            </Tooltip>
-          )}
-          
-          {!record.is_reviewed && (
-            <Tooltip title="Đánh dấu đã xem">
-              <Button 
-                  type="primary" 
-                  size="small" 
-                  icon={<CheckCircleOutlined />} 
-                  onClick={() => handleReview(record.id)}
-              >
-                  Xác nhận
-              </Button>
-            </Tooltip>
-          )}
+          <Button size="small" type="primary" ghost icon={<EyeOutlined />} onClick={() => handleViewDetail(r)} />
+          {!r.is_reviewed && <Button size="small" icon={<CheckCircleOutlined />} onClick={() => handleReview(r.id)} />}
+          <Popconfirm title="Xóa?" onConfirm={() => handleDeleteItem(r.id)} okText="Xóa" cancelText="Hủy" okButtonProps={{danger:true}}>
+            <Button size="small" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
         </Space>
-      ),
-    },
+      )
+    }
   ];
 
   return (
     <div style={{ padding: '24px' }}>
-      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Title level={2} style={{ margin: 0, color: '#cf1322' }}>
-           Lịch sử Cảnh báo Bạo lực
-        </Title>
+      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between' }}>
+        <Title level={2} style={{ margin: 0, color: '#cf1322' }}><ExclamationCircleOutlined /> Sự cố Bạo lực</Title>
         <Space>
-            <Button 
-              icon={<SyncOutlined />} 
-              loading={loading} 
-              onClick={handleSearch}
-            >
-                Làm mới
-            </Button>
+           <Button danger icon={<DeleteOutlined />} onClick={() => setIsDeleteRangeModalOpen(true)}>Xóa Range</Button>
+           <Button icon={<SyncOutlined />} loading={loading} onClick={handleSearch}>Làm mới</Button>
         </Space>
       </div>
-
-      <Card bordered={false} style={{ borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-        <div style={{ marginBottom: 20, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', background: '#fafafa', padding: 16, borderRadius: 8 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontSize: 12, fontWeight: 500, color: '#666' }}>Camera ID:</span>
-                <Input 
-                    placeholder="VD: test" 
-                    prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />} 
-                    style={{ width: 220 }} 
-                    allowClear
-                    value={searchCameraId}
-                    onChange={(e) => setSearchCameraId(e.target.value)}
-                    onPressEnter={handleSearch}
-                />
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <span style={{ fontSize: 12, fontWeight: 500, color: '#666' }}>Số lượng hiển thị:</span>
-              <InputNumber
-                min={1}
-                max={1000}
-                value={searchLimit}
-                onChange={(val) => setSearchLimit(val || 100)}
-                style={{ width: 120 }}
-                placeholder="Limit"
-              />
-            </div>
-
-            <div style={{ marginTop: 22 }}>
-                <Button type="primary" onClick={handleSearch} loading={loading} icon={<SearchOutlined />}>
-                    Tìm kiếm
-                </Button>
-                {(searchCameraId || searchLimit !== 100) && (
-                    <Button onClick={handleClear} style={{ marginLeft: 8 }}>
-                        Mặc định
-                    </Button>
-                )}
-            </div>
-        </div>
-
-        <Table 
-            columns={columns} 
-            dataSource={data} 
-            rowKey="id"
-            loading={loading}
-            pagination={{ 
-                pageSize: 10,
-                showSizeChanger: true,
-                pageSizeOptions: ['10', '20', '50', '100'],
-                showTotal: (total) => `Tổng cộng ${total} sự cố`
-            }} 
-            scroll={{ x: 1000 }}
-        />
+      <Card bordered={false} style={{ marginBottom: 16 }}>
+        <Space>
+           <Input placeholder="Camera ID..." value={searchCameraId} onChange={e=>setSearchCameraId(e.target.value)} style={{width:200}} onPressEnter={handleSearch}/>
+           <InputNumber min={1} max={1000} value={searchLimit} onChange={v=>setSearchLimit(v||100)}/>
+           <Button type="primary" onClick={handleSearch} icon={<SearchOutlined />}>Tìm kiếm</Button>
+        </Space>
+      </Card>
+      <Card bordered={false}>
+         <Table columns={columns} dataSource={data} rowKey="id" loading={loading} scroll={{x:1000}} />
       </Card>
 
       <Modal
-        title={`Xem lại: ${currentVideoName}`}
-        open={isVideoModalOpen}
-        onCancel={handleCloseVideoModal}
+        title={`Chi tiết sự cố #${selectedIncident?.id} - Cam: ${selectedIncident?.camera_id}`}
+        open={isDetailModalOpen}
+        onCancel={() => setIsDetailModalOpen(false)}
+        width={900}
+        centered
         footer={[
+          <Button key="close" onClick={() => setIsDetailModalOpen(false)}>Đóng</Button>,
           <Button 
-            key="open-new" 
-            icon={<ExportOutlined />} 
-            onClick={() => window.open(currentVideoUrl, '_blank')}
+            key="search" type="primary" icon={<SearchOutlined />} 
+            disabled={!selectedClipPath} loading={isSearching} 
+            onClick={handleSearchSelectedClip}
+            style={{ background: selectedClipPath ? '#1890ff' : undefined }}
           >
-            Mở Tab Mới (Tải về)
-          </Button>,
-          <Button key="close" type="primary" onClick={handleCloseVideoModal}>
-            Đóng
+            {selectedClipPath ? 'Tìm kiếm đối tượng đã chọn' : 'Vui lòng chọn 1 ảnh đối tượng'}
           </Button>
         ]}
-        width={800}
-        destroyOnClose
-        centered
       >
-        {currentVideoUrl && (
-          <div style={{ background: '#000', borderRadius: 8, overflow: 'hidden', position: 'relative', minHeight: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-             {/* CẬP NHẬT QUAN TRỌNG:
-                - Dùng src trực tiếp trong thẻ video.
-                - Thêm muted để hỗ trợ autoplay tốt hơn.
-                - Bỏ crossOrigin nếu server chưa config CORS chuẩn để tránh lỗi block ngay lập tức.
-             */}
-             <video 
-              key={currentVideoUrl} 
-              controls 
-              autoPlay
-              muted 
-              style={{ width: '100%', maxHeight: '60vh', display: videoError ? 'none' : 'block' }}
-              src={currentVideoUrl}
-              onError={(e) => {
-                console.error("Video load error event:", e);
-                setVideoError(true);
-              }}
-            >
-              Trình duyệt của bạn không hỗ trợ thẻ video.
-            </video>
-
-            {videoError && (
-              <div style={{ padding: 20, textAlign: 'center', width: '100%' }}>
-                 <Alert
-                    message="Không thể phát video"
-                    description="Server chưa mở quyền truy cập file (404) hoặc file không tồn tại."
-                    type="error"
-                    showIcon
-                 />
-                 <div style={{ marginTop: 16 }}>
-                    <p style={{ color: '#ccc', fontSize: '12px' }}>URL: {currentVideoUrl}</p>
-                    <Button type="primary" ghost onClick={() => window.open(currentVideoUrl, '_blank')}>
-                      Kiểm tra Link Gốc
-                    </Button>
-                 </div>
-              </div>
-            )}
+        {detailLoading ? <div style={{textAlign:'center', padding:30}}>Loading...</div> : selectedIncident && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <Card title="1. Ảnh toàn cảnh" size="small" type="inner">
+               <div style={{display:'flex', gap:16}}>
+                 <Image src={getFullUrl(selectedIncident.image_path)} height={200} style={{borderRadius:4}} />
+                 <div><Text type="secondary">Path:</Text><br/><Paragraph copyable code>{selectedIncident.image_path}</Paragraph></div>
+               </div>
+            </Card>
+            <Card title={<span>2. Ảnh chi tiết ({selectedIncident.person_clips?.length || 0}) <span style={{fontWeight:'normal', fontSize:13, color:'#888', marginLeft: 8}}>(Tích vào ảnh bên dưới để tìm kiếm)</span></span>} size="small" type="inner">
+              {!selectedIncident.person_clips?.length ? (
+                <Alert message="Không có ảnh đối tượng." type="warning" />
+              ) : (
+                <List
+                  grid={{ gutter: 16, xs: 2, sm: 3, md: 4, lg: 4 }}
+                  dataSource={selectedIncident.person_clips}
+                  renderItem={(clip: PersonClip) => {
+                    const isSelected = selectedClipPath === clip.clip_path;
+                    return (
+                      <List.Item>
+                        <div 
+                           onClick={() => setSelectedClipPath(clip.clip_path)}
+                           style={{ 
+                             position: 'relative', cursor: 'pointer',
+                             border: isSelected ? '3px solid #1890ff' : '1px solid #d9d9d9',
+                             borderRadius: 8, padding: 4,
+                             background: isSelected ? '#e6f7ff' : '#fff',
+                             transition: 'all 0.2s'
+                           }}
+                        >
+                           {isSelected && (
+                             <div style={{ position: 'absolute', top: -10, right: -10, zIndex: 10, background: '#fff', borderRadius: '50%' }}>
+                                <CheckCircleFilled style={{ fontSize: 24, color: '#1890ff' }} />
+                             </div>
+                           )}
+                           <div style={{ textAlign: 'center', height: 120, display:'flex', alignItems:'center', justifyContent:'center', background:'#fafafa', borderRadius: 4 }}>
+                              <Image src={getFullUrl(clip.clip_path)} height="100%" style={{ objectFit: 'contain', maxHeight: 110 }} preview={false} />
+                           </div>
+                           <div style={{ marginTop: 8, textAlign: 'center' }}>
+                              <Tag color={isSelected ? "blue" : "default"}>ID: {clip.id}</Tag>
+                           </div>
+                        </div>
+                      </List.Item>
+                    );
+                  }}
+                />
+              )}
+            </Card>
           </div>
         )}
+      </Modal>
+      <Modal open={isDeleteRangeModalOpen} title="Xóa theo Range" onCancel={()=>setIsDeleteRangeModalOpen(false)} onOk={handleDeleteRangeSubmit} okButtonProps={{danger:true}} okText="Xóa">
+          <Space direction="vertical" style={{width:'100%'}}>
+             <Input placeholder="Cam ID" value={deleteRangeCamId} onChange={e=>setDeleteRangeCamId(e.target.value)}/>
+             <RangePicker showTime style={{width:'100%'}} onChange={dates=>setDeleteRangeDates(dates as any)}/>
+          </Space>
       </Modal>
     </div>
   );

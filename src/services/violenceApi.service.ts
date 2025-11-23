@@ -1,10 +1,15 @@
-import type { RegisterViolenceCameraReq, UpdateViolenceCameraReq, ViolenceCamera, ViolenceIncident } from "../types/violence";
+import type { 
+  RegisterViolenceCameraReq, 
+  UpdateViolenceCameraReq, 
+  ViolenceCamera, 
+  ViolenceIncident 
+} from "../types/violence";
 
-// Định nghĩa hằng số Base URL để dễ quản lý
+// Định nghĩa hằng số Base URL
 export const VIOLENCE_BASE_URL = 'http://10.3.9.18:9001';
 
 class ViolenceApiService {
-  // Cấu hình cứng IP Server theo yêu cầu test
+  // Cấu hình cứng IP Server
   private getBaseUrl() {
     return `${VIOLENCE_BASE_URL}/api/v1`;
   }
@@ -34,9 +39,11 @@ class ViolenceApiService {
     }
   }
 
+  // --- API CAMERA ---
+
   /**
    * Lấy danh sách Camera bạo lực
-   * GET /api/v1/camera_list (Đã cập nhật đúng theo server)
+   * GET /api/v1/camera_list
    */
   async getList(): Promise<ViolenceCamera[]> {
     return await this.apiCall('/camera_list');
@@ -98,10 +105,11 @@ class ViolenceApiService {
     });
   }
 
-  // --- API SỰ CỐ (INCIDENTS) ---
+  // --- API SỰ CỐ (INCIDENTS / FRAMES) ---
 
   /**
-   * Lấy danh sách sự cố
+   * Lấy danh sách sự cố (Incident Frames)
+   * GET /api/v1/incidents_list
    */
   async getIncidents(cameraId?: string, limit: number = 100): Promise<ViolenceIncident[]> {
     const params = new URLSearchParams();
@@ -110,16 +118,51 @@ class ViolenceApiService {
       params.append('camera_id', cameraId);
     }
 
-    return await this.apiCall(`/incidents/list?${params.toString()}`);
+    // Đã đổi endpoint từ /incidents/list sang /incidents_list
+    return await this.apiCall(`/incidents_list?${params.toString()}`);
+  }
+
+  /**
+   * [MỚI] Lấy chi tiết một frame sự cố (bao gồm clips)
+   * GET /api/v1/incidents/{frame_id}
+   */
+  async getIncidentDetail(frameId: number): Promise<ViolenceIncident> {
+    return await this.apiCall(`/incidents/${frameId}`);
   }
 
   /**
    * Đánh dấu sự cố đã xem (Review)
+   * PATCH /api/v1/incidents/{frame_id}/review
    */
-  async reviewIncident(incidentId: number): Promise<ViolenceIncident> {
-    return await this.apiCall(`/incidents/${incidentId}/review`, {
+  async reviewIncident(frameId: number): Promise<ViolenceIncident> {
+    return await this.apiCall(`/incidents/${frameId}/review`, {
       method: 'PATCH',
       body: JSON.stringify({}) 
+    });
+  }
+
+  /**
+   * [MỚI] Xóa một bản ghi sự cố (frame)
+   * DELETE /api/v1/incidents/{frame_id}
+   */
+  async deleteIncident(frameId: number): Promise<any> {
+    return await this.apiCall(`/incidents/${frameId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * [MỚI] Xóa sự cố theo khoảng thời gian
+   * DELETE /api/v1/incidents/delete_by_time_range/{camera_id}
+   * start_time & end_time: ISO 8601 format
+   */
+  async deleteIncidentsByTimeRange(cameraId: string, startTime: string, endTime: string): Promise<any> {
+    const params = new URLSearchParams();
+    params.append('start_time', startTime);
+    params.append('end_time', endTime);
+
+    return await this.apiCall(`/incidents/delete_by_time_range/${cameraId}?${params.toString()}`, {
+      method: 'DELETE',
     });
   }
 }

@@ -3,9 +3,11 @@
 // ==========================================
 
 export interface Frame {
+  similarity: any;
   id: string;
   imageUrl: string;
   frameTime: string;
+  cameraId: string;
 }
 
 export interface Job {
@@ -117,6 +119,7 @@ export interface Stream {
   id?: string;
   job_id: string;
   camera_id: string;
+  
   source_type: string;
   
   stream_url?: string;

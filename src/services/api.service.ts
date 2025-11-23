@@ -84,7 +84,8 @@ class ApiService {
       frames: Array.isArray(raw.frames) ? raw.frames.map((f: any) => ({
         id: f.id || f.frame_id || '',
         imageUrl: f.image_url || f.imageUrl || '',
-        frameTime: toDateIso(f.frame_time || f.frameTime)
+        frameTime: toDateIso(f.frame_time || f.frameTime),
+        cameraId: f.camera_id || f.cameraId || '' 
       })) : undefined
     };
   }

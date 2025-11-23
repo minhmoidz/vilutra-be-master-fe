@@ -107,7 +107,7 @@ export const JobDashboard: React.FC = () => {
 
       // [THÊM MỚI] Render trang Violence List
       case 'violence-list':
-        return <ViolenceListPage />;
+        return <ViolenceListPage onSuccess={handleSearchSuccess} />;
         
       case 'detail':
         if (!currentJobId) {

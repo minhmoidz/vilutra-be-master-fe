@@ -21,11 +21,18 @@ export interface UpdateViolenceCameraReq {
   is_active: boolean;
 }
 
-// --- [MỚI] TYPES CHO SỰ CỐ BẠO LỰC ---
-export interface ViolenceIncident {
+// --- [UPDATED] TYPES CHO SỰ CỐ (INCIDENT FRAMES) ---
+
+export interface PersonClip {
   id: number;
+  clip_path: string;
+}
+
+export interface ViolenceIncident {
+  id: number;               // frame_id
   camera_id: string;
   timestamp: string;
-  video_path: string;
+  image_path: string;       // Thay thế video_path bằng image_path theo API mới
   is_reviewed: boolean;
+  person_clips?: PersonClip[]; // Mảng clip cắt ra (có thể optional nếu list không trả về)
 }
