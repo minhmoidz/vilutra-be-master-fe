@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Typography, Card, Table, Tag, Space, Button, Input, message, 
-  Tooltip, InputNumber, Modal, Alert, Image, Popconfirm, DatePicker, List 
+   InputNumber, Modal, Alert, Image, Popconfirm, DatePicker, List 
 } from 'antd';
 import { 
   SearchOutlined, CheckCircleOutlined, SyncOutlined, 
@@ -19,13 +19,11 @@ import type { ViolenceIncident, PersonClip } from '../../types/violence';
 const { Title, Text, Paragraph } = Typography;
 const { RangePicker } = DatePicker;
 
-// --- 1. THÊM INTERFACE PROPS GIỐNG SEARCH PAGE ---
 interface ViolencePageProps {
-  onSuccess: (jobId: string) => void; // Callback để chuyển sang trang Detail
+  onSuccess: (jobId: string) => void;
 }
 
 export const ViolenceListPage: React.FC<ViolencePageProps> = ({ onSuccess }) => {
-  // KHÔNG DÙNG REACT-ROUTER-DOM
 
   // --- STATE ---
   const [data, setData] = useState<ViolenceIncident[]>([]);
@@ -42,6 +40,8 @@ export const ViolenceListPage: React.FC<ViolencePageProps> = ({ onSuccess }) => 
   const [isDeleteRangeModalOpen, setIsDeleteRangeModalOpen] = useState(false);
   const [deleteRangeCamId, setDeleteRangeCamId] = useState('');
   const [deleteRangeDates, setDeleteRangeDates] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null);
+  
+  // --- [FIX] Đã sửa dòng này: Thêm biến deleteLoading và lấy đúng hàm setter ---
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const getFullUrl = (relativePath: string) => {
@@ -83,10 +83,9 @@ export const ViolenceListPage: React.FC<ViolencePageProps> = ({ onSuccess }) => 
     }
   };
 
-  // --- [QUAN TRỌNG] LOGIC TÌM KIẾM ĐÃ ĐƯỢC CẬP NHẬT ---
   const handleSearchSelectedClip = async () => {
     if (!selectedClipPath) {
-      message.warning('Vui lòng tích chọn một đối tượng ảnh bên dưới!');
+      message.warning('Vui lòng chọn một đối tượng ảnh bên dưới!');
       return;
     }
 
@@ -96,42 +95,36 @@ export const ViolenceListPage: React.FC<ViolencePageProps> = ({ onSuccess }) => 
 
     try {
       const originalUrl = getFullUrl(selectedClipPath);
-      // Xử lý Proxy để tránh lỗi CORS (Giữ nguyên logic của bạn)
-      const fetchUrl = originalUrl.includes('10.3.9.18:9001')
-        ? originalUrl.replace('http://10.3.9.18:9001', '/proxy-image')
-        : originalUrl;
+      const cacheBusterUrl = `${originalUrl}?t=${new Date().getTime()}`;
 
-      // 1. Tải ảnh về Blob
-      const res = await fetch(fetchUrl);
-      if (!res.ok) throw new Error('Không thể tải ảnh (Lỗi Proxy/CORS)');
+      const res = await fetch(cacheBusterUrl, { 
+          mode: 'cors', 
+          cache: 'no-store' 
+      });
+
+      if (!res.ok) throw new Error('Không thể tải ảnh (Lỗi CORS hoặc Mạng)');
+
       const blob = await res.blob();
       const file = new File([blob], "search_clip.jpg", { type: blob.type });
 
-      // 2. Gọi API Search (Giống SearchPageAntd)
       const response = await apiService.searchByImage(
         file,
         new Date().toISOString(),
         60
       );
 
-      // 3. Lấy Job ID (Sử dụng logic robust giống SearchPageAntd)
       const jobId = response?.jobId || response?.id || response?.data?.jobId || response?.data?.id || response?.job_id;
 
       if (jobId) {
-        message.success({ content: 'Tạo Job thành công! Đang chuyển trang...', key });
-        setIsDetailModalOpen(false); // Đóng modal chi tiết
-
-        // --- GỌI CALLBACK onSuccess THAY VÌ RELOAD TRANG ---
+        message.success({ content: `Tạo Job thành công: ${jobId}`, key });
+        setIsDetailModalOpen(false);
         if (onSuccess) {
             onSuccess(jobId);
         } else {
-            // Fallback nếu không truyền props (để tránh lỗi)
-            window.location.href = `/?jobId=${jobId}`;
+            window.location.href = `/search?jobId=${jobId}`;
         }
-        
       } else {
-        console.error('API Response:', response);
-        message.warning({ content: 'Không nhận được Job ID từ server.', key });
+        message.warning({ content: 'Server không trả về Job ID.', key });
       }
 
     } catch (error: any) {
@@ -166,14 +159,17 @@ export const ViolenceListPage: React.FC<ViolencePageProps> = ({ onSuccess }) => 
         return;
     }
     const [start, end] = deleteRangeDates;
-    setDeleteLoading(true);
+    setDeleteLoading(true); // Gọi hàm setter đúng
     try {
         await violenceApiService.deleteIncidentsByTimeRange(deleteRangeCamId, start.toISOString(), end.toISOString());
         message.success('Đã xóa theo range');
         setIsDeleteRangeModalOpen(false);
         handleSearch();
-    } catch(e:any) { message.error(e.message); }
-    finally { setDeleteLoading(false); }
+    } catch(e:any) { 
+        message.error(e.message); 
+    } finally { 
+        setDeleteLoading(false); // Gọi hàm setter đúng
+    }
   };
 
   const columns: ColumnsType<ViolenceIncident> = [
@@ -290,7 +286,15 @@ export const ViolenceListPage: React.FC<ViolencePageProps> = ({ onSuccess }) => 
           </div>
         )}
       </Modal>
-      <Modal open={isDeleteRangeModalOpen} title="Xóa theo Range" onCancel={()=>setIsDeleteRangeModalOpen(false)} onOk={handleDeleteRangeSubmit} okButtonProps={{danger:true}} okText="Xóa">
+
+      <Modal 
+          open={isDeleteRangeModalOpen} 
+          title="Xóa theo Range" 
+          onCancel={()=>setIsDeleteRangeModalOpen(false)} 
+          onOk={handleDeleteRangeSubmit} 
+          okButtonProps={{danger:true, loading: deleteLoading}} 
+          okText="Xóa"
+      >
           <Space direction="vertical" style={{width:'100%'}}>
              <Input placeholder="Cam ID" value={deleteRangeCamId} onChange={e=>setDeleteRangeCamId(e.target.value)}/>
              <RangePicker showTime style={{width:'100%'}} onChange={dates=>setDeleteRangeDates(dates as any)}/>
